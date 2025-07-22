@@ -1,0 +1,1612 @@
+
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/venusespor_cafe/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String
+  emailVerified DateTime?
+  image         String?
+  isAdmin       Boolean   @default(false)
+  
+  // Loot Box System
+  lootboxBalance Int      @default(0)  // Available loot boxes
+  totalLootboxesOpened Int @default(0) // Statistics
+  
+  accounts      Account[]
+  sessions      Session[]
+  player        Player?   // Gaming profile extension
+  reviewedSubmissions ChallengeSubmission[] @relation("AdminReviewer")
+  lootboxOpenings LootBoxOpening[]  // Loot box history
+  
+  // E-commerce Relations
+  cartItems     CartItem[]
+  orders        Order[]
+  
+  // Gamification Relations
+  xp            UserXP?
+  taskCompletions TaskCompletion[]
+  cards         UserCard[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Zone {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String
+  image       String?
+  
+  // Enhanced Zone Management Fields
+  features    String[]  @default([]) // Array of zone features
+  capacity    Int       @default(0)  // Number of seats/stations
+  equipment   String?   // JSON string for equipment details
+  pricePerHour Float    @default(0)  // Base hourly pricing
+  specialOffers String? // JSON for special pricing tiers
+  
+  isActive    Boolean   @default(true)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  duration    Int?     // minutes for gaming zones
+  zoneId      String
+  zone        Zone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  createdAt DateTime @default(now())
+}
+
+// ============ E-COMMERCE SYSTEM ============
+
+model EcommerceProduct {
+  id              String     @id @default(cuid())
+  ikasProductId   String?    @unique  // İkas product ID for sync
+  name            String
+  description     String?
+  price           Float
+  currency        String     @default("TRY")
+  sku             String     @unique
+  stock           Int        @default(0)
+  images          String[]   @default([])
+  brand           String?
+  status          String     @default("active") // active, inactive
+  
+  // Category & Classification
+  category        String?    // cpu, gpu, ram, storage, motherboard, psu
+  categoryName    String?    // Display name
+  
+  // Metadata from original hardware
+  metadata        String?    // JSON string with original hardware data
+  gamingScore     Int?
+  
+  // Relations
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model CartItem {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId       String
+  product         EcommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity        Int              @default(1)
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  @@unique([userId, productId])
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id              String       @id @default(cuid())
+  ikasOrderId     String?      @unique  // İkas order ID for sync
+  userId          String
+  user            User         @relation(fields: [userId], references: [id])
+  
+  // Order Details
+  orderNumber     String       @unique
+  status          OrderStatus  @default(PENDING)
+  total           Float
+  currency        String       @default("TRY")
+  
+  // Customer Info
+  customerEmail   String
+  customerName    String
+  customerPhone   String?
+  
+  // Addresses
+  shippingAddress String?      // JSON string
+  billingAddress  String?      // JSON string
+  
+  // Payment & Processing
+  paymentMethod   String?
+  paymentStatus   String?      @default("pending")
+  paidAt          DateTime?
+  
+  // Shipping
+  shippingMethod  String?
+  trackingNumber  String?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  
+  // Relations
+  items           OrderItem[]
+  
+  // Notes & Metadata
+  notes           String?
+  metadata        String?      // JSON for additional data
+  
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model OrderItem {
+  id              String           @id @default(cuid())
+  orderId         String
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         EcommerceProduct @relation(fields: [productId], references: [id])
+  
+  // Item Details
+  productName     String           // Snapshot of product name at order time
+  sku             String
+  price           Float            // Price at order time
+  quantity        Int
+  total           Float            // price * quantity
+  
+  createdAt       DateTime         @default(now())
+}
+
+model IkasSync {
+  id              String   @id @default(cuid())
+  type            String   // 'product', 'order', 'customer'
+  localId         String   // Local database ID
+  ikasId          String   // İkas ID
+  status          String   @default("synced") // synced, pending, error
+  lastSyncAt      DateTime @default(now())
+  errorMessage    String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([type, localId])
+  @@unique([type, ikasId])
+}
+
+// Tournament System Models
+
+model Player {
+  id              String            @id @default(cuid())
+  userId          String?           @unique
+  user            User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gamertag        String            @unique
+  displayName     String
+  email           String?
+  phone           String?
+  avatar          String?
+  bio             String?
+  
+  // Gaming Stats
+  totalPoints     Int               @default(0)
+  currentRank     String            @default("Bronze")
+  skillRating     Float             @default(1000.0) // TRP equivalent
+  totalMatches    Int               @default(0)
+  totalWins       Int               @default(0)
+  winRate         Float             @default(0.0)
+  
+  // Gizmo Integration
+  gizmoUserId     String?           @unique
+  
+  
+  // Overwolf Integration
+  overwolfUserId  String?          @unique  // Overwolf user identifier
+  lastActiveGame  String?          // Last played game
+  isOnline        Boolean          @default(false) // Real-time online status
+  
+  // New Arcade Features
+  favoriteGame    GameTitle?       // Player's preferred game
+  playStyle       String?          // "aggressive", "tactical", "support"
+  preferredRole   String?          // "duelist", "controller", "initiator", "sentinel"
+  
+  // Enhanced Stats
+  currentStreak   Int              @default(0)  // Current win/loss streak
+  longestStreak   Int              @default(0)  // Longest win streak
+  clutchWins      Int              @default(0)  // 1vX clutch wins
+  mvpCount        Int              @default(0)  // MVP/POTG count
+  
+  // Social Features
+  title          String?          // Custom title/badge
+  showcase       String[]         // Featured achievements/stats
+  
+  // Relations
+  registrations   Registration[]
+  results         TournamentResult[]
+  stats           PlayerStats[]
+  achievements    PlayerAchievement[]
+  rewards         PlayerReward[]
+  battlePasses    PlayerBattlePass[]
+  submissions     ChallengeSubmission[]
+  
+  // Overwolf Relations
+  matches         OverwolfMatch[]  @relation("PlayerMatches")
+  challengeProgress ChallengeProgress[] @relation("PlayerChallengeProgress")
+  dailyStats      DailyStats[]     @relation("PlayerDailyStats")
+  
+  // New Arcade Relations
+  ranks          PlayerRank[]     @relation("PlayerRanks")
+  
+  // Gizmo Relations
+  gizmoProfile    GizmoProfile?
+  
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model Game {
+  id            String       @id @default(cuid())
+  name          String       @unique
+  slug          String       @unique
+  description   String?
+  image         String?
+  category      String       // FPS, MOBA, BR, etc.
+  platforms     String[]     // PC, Console, Mobile
+  maxPlayers    Int          @default(1)
+  isTeamBased   Boolean      @default(false)
+  
+  tournaments   Tournament[]
+  challenges    Challenge[]
+  stats         PlayerStats[]
+  
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+enum TournamentStatus {
+  UPCOMING
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TournamentFormat {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+  SWISS
+  LADDER
+}
+
+model Tournament {
+  id                String              @id @default(cuid())
+  title             String
+  slug              String              @unique
+  description       String?
+  image             String?
+  
+  gameId            String
+  game              Game                @relation(fields: [gameId], references: [id])
+  seasonId          String?
+  season            Season?             @relation(fields: [seasonId], references: [id])
+  
+  format            TournamentFormat    @default(SINGLE_ELIMINATION)
+  status            TournamentStatus    @default(UPCOMING)
+  maxParticipants   Int                 @default(64)
+  entryFee          Float               @default(0)
+  
+  // Prize Pool
+  totalPrizePool    Float               @default(0)
+  cashPrize         Float               @default(0)
+  bonusCredits      Float               @default(0)
+  
+  // Schedule
+  registrationStart DateTime
+  registrationEnd   DateTime
+  startDate         DateTime
+  endDate           DateTime?
+  
+  // Location
+  isOnline          Boolean             @default(false)
+  venue             String?
+  
+  // Skill Requirements
+  minRating         Float?
+  maxRating         Float?
+  requiredRank      String?
+  
+  // Relations
+  registrations     Registration[]
+  results           TournamentResult[]
+  rewards           Reward[]
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+enum ChallengeType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  SPECIAL
+}
+
+enum ChallengeCategory {
+  AUTO    // Gizmo-based automatic challenges
+  MANUAL  // Screenshot-based manual challenges
+}
+
+enum ChallengeStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  UNDER_REVIEW
+}
+
+model Challenge {
+  id              String            @id @default(cuid())
+  title           String
+  description     String
+  image           String?
+  
+  gameId          String
+  game            Game              @relation(fields: [gameId], references: [id])
+  
+  type            ChallengeType
+  category        ChallengeCategory @default(AUTO)
+  difficulty      String            @default("Easy") // Easy, Medium, Hard, Expert
+  
+  // Requirements
+  target          String            // "Win 5 matches", "Get 10 kills", etc.
+  targetValue     Int
+  currentProgress Int               @default(0)
+  
+  // Auto Challenge Fields (Gizmo Integration)
+  gizmoTrackingKey String?          // Key for Gizmo to track (e.g., "play_time", "spending")
+  autoCompleteRule String?          // JSON rule for auto completion
+  
+  // Manual Challenge Fields  
+  submissionInstructions String?    // Instructions for screenshot submission
+  exampleImages          String[]   // Example screenshot URLs
+  requiredProofCount     Int        @default(1) // How many screenshots needed
+  
+  // Rewards
+  pointsReward    Int               @default(0)
+  creditsReward   Float             @default(0)
+  
+  // Schedule
+  startDate       DateTime
+  endDate         DateTime
+  
+  status          ChallengeStatus   @default(ACTIVE)
+  
+  // Relations
+  registrations   Registration[]
+  submissions     ChallengeSubmission[]
+  
+  progress        ChallengeProgress[] @relation("ChallengeProgress")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model ChallengeSubmission {
+  id              String            @id @default(cuid())
+  challengeId     String
+  challenge       Challenge         @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  playerId        String
+  player          Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  
+  // Submission Data
+  screenshotUrls  String[]          // Uploaded screenshot URLs
+  description     String?           // Optional description from player
+  metadata        String?           // JSON metadata (game stats, etc.)
+  
+  // Admin Review
+  status          SubmissionStatus  @default(PENDING)
+  reviewedById    String?           // Admin who reviewed
+  reviewedBy      User?             @relation("AdminReviewer", fields: [reviewedById], references: [id])
+  reviewNotes     String?           // Admin review comments
+  reviewedAt      DateTime?
+  
+  // Auto-completion tracking
+  isAutoCompleted Boolean           @default(false)
+  autoCompletedAt DateTime?
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@unique([challengeId, playerId])
+}
+
+model Season {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  description     String?
+  image           String?
+  
+  // Season Details
+  seasonNumber    Int
+  totalPrizePool  Float         @default(0)
+  battlePassPrice Float         @default(0)
+  
+  // Schedule
+  startDate       DateTime
+  endDate         DateTime
+  
+  // Relations
+  tournaments     Tournament[]
+  battlePasses    BattlePass[]
+  
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model BattlePass {
+  id              String              @id @default(cuid())
+  seasonId        String
+  season          Season              @relation(fields: [seasonId], references: [id])
+  
+  name            String
+  description     String?
+  price           Float
+  benefits        String[]            // JSON array of benefits
+  
+  // Guaranteed gaming hours, discounts, etc.
+  gamingHours     Int                 @default(0)
+  discountPercent Float               @default(0)
+  
+  players         PlayerBattlePass[]
+  
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  NO_SHOW
+}
+
+model Registration {
+  id              String              @id @default(cuid())
+  playerId        String
+  player          Player              @relation(fields: [playerId], references: [id])
+  
+  tournamentId    String?
+  tournament      Tournament?         @relation(fields: [tournamentId], references: [id])
+  challengeId     String?
+  challenge       Challenge?          @relation(fields: [challengeId], references: [id])
+  
+  // Team Info (for team tournaments)
+  teamName        String?
+  teammates       String[]            // JSON array of teammate playerIds
+  isTeamLeader    Boolean             @default(false)
+  needsTeam       Boolean             @default(false)
+  
+  status          RegistrationStatus  @default(PENDING)
+  notes           String?
+  
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  
+  @@unique([playerId, tournamentId])
+  @@unique([playerId, challengeId])
+}
+
+model TournamentResult {
+  id              String      @id @default(cuid())
+  tournamentId    String
+  tournament      Tournament  @relation(fields: [tournamentId], references: [id])
+  playerId        String
+  player          Player      @relation(fields: [playerId], references: [id])
+  
+  position        Int         // 1st, 2nd, 3rd, etc.
+  score           Float?      // kills, points, etc.
+  matchesWon      Int         @default(0)
+  matchesLost     Int         @default(0)
+  
+  // Earnings
+  cashEarned      Float       @default(0)
+  creditsEarned   Float       @default(0)
+  pointsEarned    Int         @default(0)
+  
+  createdAt       DateTime    @default(now())
+  
+  @@unique([tournamentId, playerId])
+}
+
+model PlayerStats {
+  id              String      @id @default(cuid())
+  playerId        String
+  player          Player      @relation(fields: [playerId], references: [id])
+  gameId          String
+  game            Game        @relation(fields: [gameId], references: [id])
+  
+  // General Stats
+  gamesPlayed     Int         @default(0)
+  wins            Int         @default(0)
+  losses          Int         @default(0)
+  winRate         Float       @default(0.0)
+  
+  // Game-specific stats (JSON)
+  kills           Int?
+  deaths          Int?
+  assists         Int?
+  kda             Float?
+  headshots       Int?
+  accuracy        Float?
+  
+  // Performance metrics
+  avgScore        Float       @default(0)
+  bestScore       Float       @default(0)
+  totalPlayTime   Int         @default(0) // minutes
+  
+  lastUpdated     DateTime    @updatedAt
+  
+  @@unique([playerId, gameId])
+}
+
+model Achievement {
+  id              String              @id @default(cuid())
+  name            String              @unique
+  description     String
+  icon            String?
+  category        String              // Tournament, Challenge, Skill, etc.
+  difficulty      String              @default("Common") // Common, Rare, Epic, Legendary
+  
+  // Requirements
+  requirements    String              // JSON describing requirements
+  pointsReward    Int                 @default(0)
+  
+  players         PlayerAchievement[]
+  
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+}
+
+model PlayerAchievement {
+  id              String      @id @default(cuid())
+  playerId        String
+  player          Player      @relation(fields: [playerId], references: [id])
+  achievementId   String
+  achievement     Achievement @relation(fields: [achievementId], references: [id])
+  
+  unlockedAt      DateTime    @default(now())
+  
+  @@unique([playerId, achievementId])
+}
+
+model Reward {
+  id              String        @id @default(cuid())
+  tournamentId    String?
+  tournament      Tournament?   @relation(fields: [tournamentId], references: [id])
+  
+  name            String
+  description     String?
+  type            String        // Cash, Credits, Item, etc.
+  value           Float
+  position        Int?          // 1st place, 2nd place, etc.
+  
+  players         PlayerReward[]
+  
+  createdAt       DateTime      @default(now())
+}
+
+model PlayerReward {
+  id              String    @id @default(cuid())
+  playerId        String
+  player          Player    @relation(fields: [playerId], references: [id])
+  rewardId        String
+  reward          Reward    @relation(fields: [rewardId], references: [id])
+  
+  claimed         Boolean   @default(false)
+  claimedAt       DateTime?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@unique([playerId, rewardId])
+}
+
+model PlayerBattlePass {
+  id              String      @id @default(cuid())
+  playerId        String
+  player          Player      @relation(fields: [playerId], references: [id])
+  battlePassId    String
+  battlePass      BattlePass  @relation(fields: [battlePassId], references: [id])
+  
+  purchasedAt     DateTime    @default(now())
+  expiresAt       DateTime
+  
+  // Usage tracking
+  hoursUsed       Int         @default(0)
+  discountsUsed   Int         @default(0)
+  
+  isActive        Boolean     @default(true)
+  
+  @@unique([playerId, battlePassId])
+}
+
+// ============ GAMIFICATION SYSTEM ============
+
+model UserXP {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  currentXP       Int       @default(0)
+  totalXP         Int       @default(0)
+  level           Int       @default(1)
+  
+  // XP sources tracking
+  tasksXP         Int       @default(0)
+  gamesXP         Int       @default(0)
+  bonusXP         Int       @default(0)
+  
+  lastUpdated     DateTime  @updatedAt
+  createdAt       DateTime  @default(now())
+}
+
+model GamificationTask {
+  id              String            @id @default(cuid())
+  title           String
+  description     String
+  icon            String?           // emoji or icon name
+  
+  // Task properties
+  type            String            @default("daily") // daily, weekly, special
+  difficulty      String            @default("easy")  // easy, medium, hard
+  category        String            @default("general") // gaming, social, cafe
+  
+  // Requirements
+  target          String            // "play_30_minutes", "spend_50_tl", etc.
+  targetValue     Int               @default(1)
+  
+  // Rewards
+  xpReward        Int               @default(10)
+  creditsReward   Float             @default(0)
+  
+  // Schedule
+  startDate       DateTime          @default(now())
+  endDate         DateTime?         // null for permanent tasks
+  
+  // Status
+  isActive        Boolean           @default(true)
+  isRepeatable    Boolean           @default(true)
+  
+  // Relations
+  completions     TaskCompletion[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model TaskCompletion {
+  id              String            @id @default(cuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId          String
+  task            GamificationTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  // Completion details
+  progress        Int               @default(0) // current progress
+  completed       Boolean           @default(false)
+  completedAt     DateTime?
+  
+  // Rewards claimed
+  xpClaimed       Int               @default(0)
+  creditsClaimed  Float             @default(0)
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@unique([userId, taskId])
+}
+
+model Card {
+  id              String      @id @default(cuid())
+  name            String      @unique
+  description     String
+  image           String?     // card image URL
+  
+  // Card properties
+  rarity          String      @default("common") // common, rare, epic, legendary
+  category        String      @default("general") // food, gaming, meme, special
+  
+  // Game mechanics
+  unlockLevel     Int         @default(1)        // minimum level to unlock
+  unlockCost      Int         @default(100)      // XP or credits cost
+  
+  // Fun attributes for instant ramen style cards
+  flavor          String?     // "spicy", "mild", "extra_hot"
+  power           Int         @default(1)        // 1-10 power level
+  collectible     Boolean     @default(true)
+  
+  // Relations
+  userCards       UserCard[]
+  
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model UserCard {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardId          String
+  card            Card      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // Collection details
+  quantity        Int       @default(1)
+  unlockedAt      DateTime  @default(now())
+  isFavorite      Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([userId, cardId])
+}
+
+// Leaderboard View (computed from PlayerStats and TournamentResults)
+model Leaderboard {
+  id              String    @id @default(cuid())
+  playerId        String
+  gameId          String?
+  
+  // Rankings
+  overallRank     Int?
+  gameRank        Int?
+  skillRating     Float     @default(1000.0)
+  totalPoints     Int       @default(0)
+  
+  // Performance
+  tournamentsWon  Int       @default(0)
+  totalWinnings   Float     @default(0)
+  
+  lastUpdated     DateTime  @updatedAt
+  
+  @@unique([playerId, gameId])
+}
+
+// ============ LOOT BOX SYSTEM ============
+
+enum LootBoxRarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+enum LootBoxRewardType {
+  FREE_HOURS        // Ücretsiz PC kullanım saatleri
+  DRINK_COUPON      // İçecek kuponları
+  BATTLEPASS_XP     // BattlePass XP
+  TOURNAMENT_ENTRY  // Turnuva katılım hakkı
+  CREDITS           // Kredi
+  SPECIAL_ITEM      // Özel eşyalar (Avatar, Badge vb.)
+}
+
+model LootBoxReward {
+  id              String            @id @default(cuid())
+  name            String            // "5 Saat Ücretsiz PC", "Kahve Kuponu"
+  description     String?           // Detaylı açıklama
+  icon            String?           // Ödül ikonu URL'i
+  image           String?           // Ödül görseli URL'i
+  
+  type            LootBoxRewardType
+  rarity          LootBoxRarity     @default(COMMON)
+  
+  // Reward Values
+  value           Float             @default(0)    // Hours, credits, etc.
+  quantity        Int               @default(1)    // Coupon count, XP amount
+  
+  // Drop Rate (probability weight)
+  weight          Int               @default(100)  // Higher = more common
+  
+  // Conditions
+  minUserLevel    Int?              // Minimum user level required
+  requiredBadge   String?           // Required achievement/badge
+  
+  // Relations
+  openings        LootBoxOpening[]
+  
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model LootBoxOpening {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rewardId        String
+  reward          LootBoxReward  @relation(fields: [rewardId], references: [id])
+  
+  // Opening details
+  rarity          LootBoxRarity  // Cache rarity for quick queries
+  animationSeed   String?        // For reproducible animations
+  
+  // Claim status
+  claimed         Boolean        @default(false)
+  claimedAt       DateTime?
+  
+  // Metadata
+  ipAddress       String?        // For fraud prevention
+  userAgent       String?        // Browser info
+  
+  createdAt       DateTime       @default(now())
+  
+  @@index([userId, createdAt])
+  @@index([rarity, createdAt])
+}
+
+model LootBoxConfig {
+  id              String    @id @default(cuid())
+  key             String    @unique  // "min_balance_requirement", "max_daily_openings"
+  value           String               // JSON value
+  description     String?
+  
+  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime  @default(now())
+}
+
+
+// ============ OVERWOLF INTEGRATION MODELS ============
+
+enum GameTitle {
+  VALORANT
+  CSGO
+  CS2
+  LEAGUE_OF_LEGENDS
+  DOTA2
+  APEX_LEGENDS
+  ROCKET_LEAGUE
+  FORTNITE
+}
+
+enum MatchStatus {
+  LIVE
+  COMPLETED
+  ABANDONED
+  CANCELLED
+}
+
+enum EventType {
+  KILL
+  DEATH
+  ASSIST
+  WIN
+  LOSS
+  ACE
+  CLUTCH
+  HEADSHOT
+  FIRST_BLOOD
+  MVP
+  MULTI_KILL
+  DEFUSE
+  PLANT
+  ROUND_WIN
+  ROUND_LOSS
+  DAMAGE_DEALT
+  HEALING_DONE
+  OBJECTIVE_COMPLETED
+}
+
+model OverwolfMatch {
+  id          String        @id @default(cuid())
+  playerId        String
+  player          Player        @relation("PlayerMatches", fields: [playerId], references: [id], onDelete: Cascade)
+  
+  // Match Identification
+  gameTitle       GameTitle
+  gameId          String?       // Game-specific match ID
+  sessionId       String?       // Overwolf session ID
+  matchId         String?       // In-game match ID
+  
+  // Match Details
+  gameMode        String?       // "Competitive", "Ranked", "Casual", etc.
+  mapName         String?
+  duration        Int?          // Match duration in seconds
+  status          MatchStatus   @default(LIVE)
+  
+  // Team Information
+  teamName        String?
+  isTeamLeader    Boolean       @default(false)
+  teammates       String[]      // Array of teammate names/IDs
+  opponents       String[]      // Array of opponent names/IDs
+  
+  // Match Outcome
+  won          Boolean?      // null for ongoing matches
+  score          String?       // "13-11", "Victory", etc.
+  playerScore     Int?          // Individual score/kills
+  rank          String?       // Player rank during match
+  
+  // Game-Specific Stats
+  kills          Int          @default(0)
+  deaths          Int          @default(0)
+  assists         Int          @default(0)
+  kda          Float?        // Calculated KDA ratio
+  headshots       Int          @default(0)
+  accuracy        Float?        // Aim accuracy percentage
+  damage          Float         @default(0)
+  
+  // Valorant/CS-specific
+  plants          Int          @default(0)
+  defuses         Int          @default(0)
+  firstBloods     Int          @default(0)
+  aces          Int          @default(0)
+  clutches        Int          @default(0)
+  
+  // LoL-specific
+  cs          Int?          // Creep Score
+  gold          Float?        // Gold earned
+  level          Int?          // Champion level
+  wardsPlaced     Int?
+  wardsDestroyed  Int?
+  
+  // Points and Rewards
+  basePoints      Int          @default(0)
+  bonusPoints     Int          @default(0)
+  totalPoints     Int          @default(0)
+  pointsAwarded   Boolean       @default(false)
+  
+  // Metadata
+  overwolfVersion String?
+  gameVersion     String?
+  region          String?
+  
+  // Relations
+  events          OverwolfEvent[]
+  challengeProgress ChallengeProgress[]
+  highlights      MatchHighlight[]
+  
+  // Timestamps
+  startedAt       DateTime      @default(now())
+  endedAt         DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([playerId, gameTitle])
+  @@index([gameTitle, status])
+  @@index([startedAt])
+}
+
+model OverwolfEvent {
+  id          String        @id @default(cuid())
+  matchId         String
+  match          OverwolfMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  
+  // Event Details
+  eventType       EventType
+  eventData       String?       // JSON data for complex events
+  eventValue      Float?        // Damage, healing, score, etc.
+  
+  // Timing
+  timestamp       DateTime      @default(now())
+  matchTime       Int?          // Seconds since match start
+  roundNumber     Int?          // For round-based games
+  
+  // Context
+  weapon          String?       // Weapon used for kills
+  victim          String?       // Target of action
+  location        String?       // Map location/coordinates
+  distance        Float?        // Distance for kills/damage
+  
+  // Points
+  pointsEarned    Int          @default(0)
+  
+  createdAt       DateTime      @default(now())
+  
+  @@index([matchId, eventType])
+  @@index([timestamp])
+}
+
+model PointsConfig {
+  id          String        @id @default(cuid())
+  gameTitle       GameTitle
+  eventType       EventType
+  
+  // Point Values
+  basePoints      Int          @default(0)
+  multiplier      Float         @default(1.0)
+  
+  // Conditions
+  minValue        Float?        // Minimum damage/healing for points
+  maxPoints       Int?          // Daily/match cap
+  cooldown        Int?          // Seconds between similar events
+  
+  // Game Mode Modifiers
+  rankedMultiplier    Float     @default(1.5)
+  competitiveMultiplier Float   @default(1.2)
+  casualMultiplier    Float     @default(1.0)
+  
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@unique([gameTitle, eventType])
+}
+
+model ChallengeProgress {
+  id          String        @id @default(cuid())
+  challengeId     String
+  challenge       Challenge     @relation("ChallengeProgress", fields: [challengeId], references: [id], onDelete: Cascade)
+  playerId        String
+  player          Player        @relation("PlayerChallengeProgress", fields: [playerId], references: [id], onDelete: Cascade)
+  matchId         String?
+  match          OverwolfMatch? @relation(fields: [matchId], references: [id])
+  
+  // Progress Tracking
+  progressValue   Int          @default(0)
+  targetValue     Int
+  completed       Boolean       @default(false)
+  
+  // Metadata
+  eventData       String?       // JSON data for progress details
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@unique([challengeId, playerId])
+  @@index([playerId, completed])
+}
+
+model DailyStats {
+  id          String        @id @default(cuid())
+  playerId        String
+  player          Player        @relation("PlayerDailyStats", fields: [playerId], references: [id], onDelete: Cascade)
+  gameTitle       GameTitle
+  date          DateTime      @db.Date
+  
+  // Match Summary
+  matchesPlayed   Int          @default(0)
+  matchesWon      Int          @default(0)
+  winRate         Float         @default(0.0)
+  
+  // Combat Stats
+  totalKills      Int          @default(0)
+  totalDeaths     Int          @default(0)
+  totalAssists    Int          @default(0)
+  avgKDA          Float         @default(0.0)
+  
+  // Performance
+  bestKDA         Float         @default(0.0)
+  longestStreak   Int          @default(0)
+  mvpCount        Int          @default(0)
+  aceCount        Int          @default(0)
+  
+  // Points
+  totalPoints     Int          @default(0)
+  bonusPoints     Int          @default(0)
+  
+  // Playtime
+  totalPlaytime   Int          @default(0) // Minutes
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@unique([playerId, gameTitle, date])
+  @@index([gameTitle, date])
+  @@index([totalPoints])
+}
+
+// ============ GIZMO INTEGRATION MODELS ============
+
+enum GizmoActivityType {
+  LOGIN
+  LOGOUT
+  GAME_START
+  GAME_END
+  PURCHASE
+  PAYMENT
+  TIME_EXTEND
+  PAUSE
+  RESUME
+  ADMIN_ACTION
+  BALANCE_UPDATE
+}
+
+enum GizmoTransactionType {
+  DEPOSIT
+  PURCHASE
+  REFUND
+  ADJUSTMENT
+  TIME_PURCHASE
+  PRODUCT_PURCHASE
+  SERVICE_FEE
+}
+
+enum GizmoSessionStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  TERMINATED
+}
+
+model GizmoProfile {
+  id          String    @id @default(cuid())
+  playerId        String    @unique
+  player          Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  
+  // Gizmo User Info
+  gizmoUserId     Int       @unique  // Gizmo system user ID
+  username        String    @unique  // Gizmo username
+  firstName       String?
+  lastName        String?
+  phone          String?
+  birthDate       DateTime?
+  
+  // Account Status
+  isActive        Boolean   @default(true)
+  isBanned        Boolean   @default(false)
+  banReason       String?
+  banExpiry       DateTime?
+  
+  // Financial Info
+  currentBalance  Float     @default(0.0)  // Current account balance
+  totalDeposits   Float     @default(0.0)  // Lifetime deposits
+  totalSpending   Float     @default(0.0)  // Lifetime spending
+  creditLimit     Float     @default(0.0)  // Credit limit
+  
+  // Usage Stats
+  totalPlayTime   Int       @default(0)    // Total minutes played
+  totalSessions   Int       @default(0)    // Total sessions count
+  averageSession  Float     @default(0.0)  // Average session length (minutes)
+  lastActiveDate  DateTime? // Last activity date
+  
+  // Membership
+  membershipType  String?   // "VIP", "Premium", "Standard"
+  membershipExpiry DateTime?
+  loyaltyPoints   Int       @default(0)
+  
+  // Relations
+  sessions        GizmoSession[]
+  transactions    GizmoTransaction[]
+  activities      GizmoActivity[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([gizmoUserId])
+  @@index([isActive])
+}
+
+model GizmoSession {
+  id          String            @id @default(cuid())
+  profileId       String
+  profile         GizmoProfile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  // Session Details
+  sessionId       String            @unique  // Gizmo session ID
+  computerName    String?           // PC-001, PS5-001, etc.
+  zoneName        String?           // "PC Zone", "PS5 Zone", "Cafe"
+  
+  // Timing
+  startTime       DateTime
+  endTime         DateTime?
+  duration        Int?              // Minutes (calculated when session ends)
+  pausedDuration  Int               @default(0)  // Total paused time
+  
+  status          GizmoSessionStatus @default(ACTIVE)
+  
+  // Costs
+  ratePerMinute   Float             @default(0)
+  totalCost       Float             @default(0)
+  discountAmount  Float             @default(0)
+  finalCost       Float             @default(0)
+  
+  // Usage Details
+  applicationsUsed String[]         // Software/games used
+  bandwidth       Float             @default(0)  // MB downloaded
+  
+  // Relations
+  activities      GizmoActivity[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([profileId, startTime])
+  @@index([status])
+  @@index([computerName])
+}
+
+model GizmoTransaction {
+  id          String              @id @default(cuid())
+  profileId       String
+  profile         GizmoProfile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  // Transaction Details
+  transactionId   String              @unique  // Gizmo transaction ID
+  type          GizmoTransactionType
+  amount          Float
+  description     String
+  
+  // Payment Info
+  paymentMethod   String?             // "Cash", "Card", "Online", "Credit"
+  referenceNumber String?             // Receipt/reference number
+  
+  // Product/Service Details
+  productName     String?
+  productCategory String?             // "Gaming", "Food", "Drinks", "Time"
+  quantity        Int                 @default(1)
+  unitPrice       Float?
+  
+  // Status
+  isSuccessful    Boolean             @default(true)
+  isPending       Boolean             @default(false)
+  errorMessage    String?
+  
+  // Balance Impact
+  balanceBefore   Float               @default(0)
+  balanceAfter    Float               @default(0)
+  
+  // Metadata
+  operatorName    String?             // Staff member who processed
+  locationId      String?             // Cafe location
+  ipAddress       String?
+  
+  createdAt       DateTime            @default(now())
+  
+  @@index([profileId, createdAt])
+  @@index([type, createdAt])
+  @@index([isSuccessful])
+}
+
+model GizmoActivity {
+  id          String            @id @default(cuid())
+  profileId       String?
+  profile         GizmoProfile?     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sessionId       String?
+  session         GizmoSession?     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  // Activity Details
+  type          GizmoActivityType
+  title          String            // Brief title
+  description     String?           // Detailed description
+  
+  // Context
+  computerName    String?
+  zoneName        String?
+  applicationName String?           // Game/software name
+  
+  // Metadata
+  duration        Int?              // Activity duration in seconds
+  value          Float?            // Associated value (cost, points, etc.)
+  metadata        String?           // JSON for additional data
+  
+  // System Info
+  ipAddress       String?
+  userAgent       String?
+  operatorId      String?
+  
+  timestamp       DateTime          @default(now())
+  
+  @@index([profileId, timestamp])
+  @@index([type, timestamp])
+  @@index([sessionId])
+}
+
+model GizmoSettings {
+  id          String    @id @default(cuid())
+  key          String    @unique
+  value          String    // JSON value
+  description     String?
+  category        String    @default("general")  // "rates", "limits", "features"
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ============ ENHANCED ARCADE SYSTEM MODELS ============
+
+model GameConfig {
+  id          String        @id @default(cuid())
+  gameTitle       GameTitle     @unique
+  displayName     String        // "VALORANT", "Counter-Strike 2"
+  shortName       String        // "VAL", "CS2", "LoL"
+  slug          String        @unique
+  description     String?
+  
+  // Visual Assets
+  logo          String?       // Game logo URL
+  banner          String?       // Game banner URL
+  icon          String?       // Game icon URL
+  primaryColor    String        @default("#FF4655") // Game brand color
+  
+  // Game Configuration
+  maxRankTier     Int           @default(7)   // Number of rank tiers
+  rankNames       String[]      // ["Iron", "Bronze", "Silver", ...]
+  defaultRank     String        @default("Unranked")
+  
+  // Point System
+  killPoints      Int           @default(10)
+  assistPoints    Int           @default(5)
+  winPoints       Int           @default(50)
+  mvpPoints       Int           @default(25)
+  acePoints       Int           @default(100)
+  
+  // Features
+  hasRanks        Boolean       @default(true)
+  hasKDA          Boolean       @default(true)
+  hasHeadshots    Boolean       @default(true)
+  hasObjectives   Boolean       @default(true)
+  supportsTeams   Boolean       @default(true)
+  
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model RealtimeLeaderboard {
+  id          String        @id @default(cuid())
+  gameTitle       GameTitle?    // null for overall leaderboard
+  period          String        // "daily", "weekly", "monthly", "alltime"
+  category        String        // "kills", "wins", "points", "kda"
+  
+  // Cached Data (for performance)
+  data          String        // JSON array of leaderboard entries
+  lastUpdated     DateTime      @default(now())
+  
+  // Configuration
+  maxEntries      Int           @default(100)
+  updateInterval  Int           @default(300) // seconds
+  
+  @@unique([gameTitle, period, category], map: "unique_leaderboard")
+  @@index([lastUpdated])
+}
+
+model PlayerRank {
+  id          String        @id @default(cuid())
+  playerId        String
+  player          Player        @relation("PlayerRanks", fields: [playerId], references: [id], onDelete: Cascade)
+  gameTitle       GameTitle
+  
+  // Current Rank
+  currentRank     String        @default("Unranked")
+  currentTier     Int           @default(0)
+  rankPoints      Int           @default(0)
+  
+  // Season Stats
+  seasonWins      Int           @default(0)
+  seasonLosses    Int           @default(0)
+  peakRank        String?
+  peakTier        Int           @default(0)
+  
+  // Historical Tracking
+  rankHistory     String?       // JSON array of rank changes
+  lastRankUp      DateTime?
+  lastRankDown    DateTime?
+  
+  // Performance Metrics
+  performanceRating Float       @default(1000.0)
+  recentForm      String?       // "W-L-W-W-L" last 5 games
+  
+  isActive        Boolean       @default(true)
+  seasonStartDate DateTime      @default(now())
+  lastUpdated     DateTime      @updatedAt
+  
+  @@unique([playerId, gameTitle])
+  @@index([gameTitle, currentTier])
+}
+
+model WeeklyChallenge {
+  id          String        @id @default(cuid())
+  week          Int           // Week number of year
+  year          Int
+  gameTitle       GameTitle?    // null for global challenges
+  
+  // Challenge Details
+  title          String
+  description     String
+  category        String        // "combat", "objective", "teamplay"
+  difficulty      String        @default("medium") // easy, medium, hard, extreme
+  
+  // Requirements
+  targetType      String        // "kills", "wins", "headshots", "plants"
+  targetValue     Int
+  timeLimit       Int?          // hours to complete
+  
+  // Rewards
+  pointsReward    Int           @default(0)
+  badgeReward     String?       // Achievement badge
+  lootboxReward   Int           @default(0)
+  
+  // Participation
+  participantCount Int          @default(0)
+  completionCount Int           @default(0)
+  
+  // Schedule
+  startDate       DateTime
+  endDate         DateTime
+  
+  // Relations
+  completions     WeeklyChallengeCompletion[]
+  
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  
+  @@unique([week, year, gameTitle])
+  @@index([startDate, endDate])
+}
+
+model WeeklyChallengeCompletion {
+  id          String          @id @default(cuid())
+  challengeId     String
+  challenge       WeeklyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  playerId        String
+  
+  // Progress
+  currentProgress Int           @default(0)
+  completed       Boolean       @default(false)
+  completedAt     DateTime?
+  
+  // Rewards
+  pointsEarned    Int           @default(0)
+  rewardsClaimed  Boolean       @default(false)
+  
+  createdAt       DateTime      @default(now())
+  
+  @@unique([challengeId, playerId])
+  @@index([playerId, completed])
+}
+
+model MatchHighlight {
+  id          String        @id @default(cuid())
+  matchId         String
+  match          OverwolfMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId        String
+  
+  // Highlight Details
+  type          String        // "ace", "clutch", "multi_kill", "first_blood"
+  title          String        // "Amazing 1v4 Clutch!"
+  description     String?
+  
+  // Context
+  roundNumber     Int?
+  timestamp       DateTime      // When highlight occurred
+  
+  // Media
+  screenshotUrl   String?
+  videoUrl        String?
+  
+  // Engagement
+  viewCount       Int           @default(0)
+  likeCount       Int           @default(0)
+  shareCount      Int           @default(0)
+  
+  // Auto-detection
+  isAutoDetected  Boolean       @default(false)
+  confidence      Float?        // AI confidence score
+  
+  isPublic        Boolean       @default(true)
+  isFeatured      Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  
+  @@index([matchId, type])
+  @@index([playerId, createdAt])
+  @@index([isFeatured, createdAt])
+}
+
+model ArcadeSession {
+  id          String        @id @default(cuid())
+  playerId        String
+  
+  // Session Info
+  sessionToken    String        @unique
+  gameTitle       GameTitle?
+  status          String        @default("active") // active, paused, ended
+  
+  // Real-time Tracking
+  isOnline        Boolean       @default(true)
+  lastHeartbeat   DateTime      @default(now())
+  currentMatch    String?       // Current match ID
+  
+  // Session Stats
+  matchesPlayed   Int           @default(0)
+  totalKills      Int           @default(0)
+  totalDeaths     Int           @default(0)
+  pointsEarned    Int           @default(0)
+  
+  // Metadata
+  clientVersion   String?
+  userAgent       String?
+  ipAddress       String?
+  
+  startedAt       DateTime      @default(now())
+  endedAt         DateTime?
+  lastActivity    DateTime      @default(now())
+  
+  @@index([playerId, status])
+  @@index([lastHeartbeat])
+  @@index([gameTitle, isOnline])
+}
+
+

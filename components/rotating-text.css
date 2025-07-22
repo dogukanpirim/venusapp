@@ -1,0 +1,35 @@
+
+.text-rotate {
+  display: inline-block;
+  overflow: hidden;
+}
+
+.text-rotate-word {
+  display: inline-block;
+  overflow: hidden;
+  padding-bottom: 0.125rem;
+}
+
+.text-rotate-element {
+  display: inline-block;
+}
+
+.text-rotate-space {
+  display: inline-block;
+}
+
+.text-rotate-lines {
+  display: block;
+}
+
+.text-rotate-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,0 +1,193 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Mobile dock spacing */
+@media (max-width: 768px) {
+  body {
+    padding-bottom: 100px; /* Space for mobile dock */
+  }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 291 100% 25%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 124 51% 60%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 60 100% 50%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 291 100% 25%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply text-foreground font-mono;
+    font-family: 'Exo 2', sans-serif;
+    background: linear-gradient(-45deg, #0a0a0a, #1a0a1a, #2a1a3a, #1a0a2a);
+    background-size: 400% 400%;
+    animation: gradient-shift 15s ease infinite;
+    position: relative;
+  }
+  
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+      radial-gradient(circle at 20% 80%, rgba(120, 69, 172, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(147, 51, 234, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 40% 40%, rgba(168, 85, 247, 0.05) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+    animation: floating-orbs 20s ease-in-out infinite;
+  }
+  
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg opacity='0.03'%3E%3Cpolygon fill='%23ffffff' points='50 0 60 40 100 50 60 60 50 100 40 60 0 50 40 40'/%3E%3C/g%3E%3C/svg%3E") repeat;
+    pointer-events: none;
+    z-index: -1;
+    animation: pattern-drift 30s linear infinite;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Orbitron', monospace;
+  }
+}
+
+@layer components {
+  .gaming-card {
+    @apply bg-gradient-to-br from-gray-900 to-gray-800 border border-purple-500/20 rounded-lg shadow-lg hover:shadow-purple-500/20 transition-all duration-300;
+  }
+  
+  .gaming-card:hover {
+    @apply shadow-xl transform translate-y-[-2px] border-purple-500/40;
+    box-shadow: 0 0 20px rgba(139, 69, 19, 0.3);
+  }
+  
+  .neon-text {
+    text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+  }
+  
+  .neon-glow {
+    box-shadow: 0 0 20px rgba(128, 0, 128, 0.5), inset 0 0 20px rgba(128, 0, 128, 0.1);
+  }
+  
+  .neon-border {
+    border: 1px solid rgba(128, 0, 128, 0.5);
+    box-shadow: 0 0 10px rgba(128, 0, 128, 0.3), inset 0 0 10px rgba(128, 0, 128, 0.1);
+  }
+  
+  .green-glow {
+    box-shadow: 0 0 15px rgba(96, 214, 106, 0.4);
+  }
+  
+  .yellow-glow {
+    box-shadow: 0 0 15px rgba(255, 255, 0, 0.4);
+  }
+}
+
+.parallax-bg {
+  background-attachment: fixed;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(128, 0, 128, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(128, 0, 128, 0.8), 0 0 35px rgba(128, 0, 128, 0.4);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Animated Background Keyframes */
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes floating-orbs {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px) scale(1);
+    opacity: 0.1;
+  }
+  25% {
+    transform: translateY(-20px) translateX(10px) scale(1.1);
+    opacity: 0.15;
+  }
+  50% {
+    transform: translateY(-10px) translateX(-10px) scale(0.9);
+    opacity: 0.1;
+  }
+  75% {
+    transform: translateY(-30px) translateX(15px) scale(1.05);
+    opacity: 0.12;
+  }
+}
+
+@keyframes pattern-drift {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(100px, 100px);
+  }
+}

@@ -1,0 +1,374 @@
+
+import { Suspense } from 'react';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { PrismaClient } from '@prisma/client';
+import { LootBoxContainer } from '../../components/loot-box-container';
+// Use simple CSS background instead of 3D component to avoid client-side errors
+const SilkBackground = () => (
+  <div className="fixed inset-0 -z-10 bg-gradient-to-br from-purple-900/20 to-black/40" />
+);
+
+export const dynamic = 'force-dynamic';
+
+const prisma = new PrismaClient();
+
+async function getUserLootBoxData(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { 
+      id: true,
+      name: true,
+      lootboxBalance: true, 
+      totalLootboxesOpened: true 
+    }
+  });
+
+  const recentOpenings = await prisma.lootBoxOpening.findMany({
+    where: { userId: user?.id },
+    include: {
+      reward: {
+        select: {
+          name: true,
+          description: true,
+          icon: true,
+          rarity: true,
+          value: true,
+          type: true,
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 5
+  });
+
+  return { user, recentOpenings };
+}
+
+export default async function LootBoxPage() {
+  // Temporarily bypass authentication for testing
+  const session = await getServerSession(authOptions);
+  
+  // Use demo user for testing
+  const demoEmail = 'john@doe.com';
+  const { user, recentOpenings } = await getUserLootBoxData(demoEmail);
+
+  if (!user) {
+    // Create a mock user for testing
+    const mockUser = {
+      id: 'test-user-id',
+      name: 'Test User',
+      lootboxBalance: 5,
+      totalLootboxesOpened: 0
+    };
+    
+    return (
+      <div className="min-h-screen relative overflow-hidden">
+        <SilkBackground />
+        
+        <div className="relative z-10 min-h-screen">
+          {/* Header */}
+          <div className="bg-black/20 backdrop-blur-sm border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-4xl font-bold text-white mb-2">
+                    🎁 Venusespor Ödül Kasası
+                  </h1>
+                  <p className="text-xl text-white/80">
+                    Heyecan verici ödüllerin seni bekliyor!
+                  </p>
+                </div>
+                
+                <div className="text-right">
+                  <div className="text-sm text-white/60">Merhaba</div>
+                  <div className="text-lg font-semibold text-white">{mockUser.name}</div>
+                  <div className="text-sm text-white/80">
+                    Toplam Açılan: {mockUser.totalLootboxesOpened}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="grid lg:grid-cols-3 gap-8">
+              
+              {/* Loot Box Area - Takes 2 columns */}
+              <div className="lg:col-span-2">
+                <Suspense fallback={
+                  <div className="bg-black/40 backdrop-blur-sm rounded-2xl border border-white/20 p-8 text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-400 mx-auto"></div>
+                    <p className="text-white/60 mt-4">Kasa yükleniyor...</p>
+                  </div>
+                }>
+                  <LootBoxContainer 
+                    initialBalance={mockUser.lootboxBalance}
+                    userId={mockUser.id}
+                  />
+                </Suspense>
+              </div>
+
+              {/* Side Panel - Recent History */}
+              <div className="space-y-6">
+                {/* Balance Card */}
+                <div className="bg-gradient-to-br from-yellow-600/20 to-orange-600/20 backdrop-blur-sm rounded-2xl border border-yellow-500/30 p-6">
+                  <div className="text-center">
+                    <div className="text-6xl font-bold text-yellow-400 mb-2">
+                      {mockUser.lootboxBalance}
+                    </div>
+                    <div className="text-yellow-200 font-semibold">
+                      Açılabilir Kasa
+                    </div>
+                    <div className="text-yellow-300/60 text-sm mt-1">
+                      Bakiye yükleyerek daha fazla kasa kazan!
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Openings */}
+                <div className="bg-black/40 backdrop-blur-sm rounded-2xl border border-white/20 p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                    📜 Son Ödüllerim
+                  </h3>
+                  
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-2">🎁</div>
+                    <div className="text-white/60">
+                      Henüz kasa açmadın
+                    </div>
+                    <div className="text-white/40 text-sm">
+                      İlk kasanı aç ve ödülünü gör!
+                    </div>
+                  </div>
+                </div>
+
+                {/* How to Play */}
+                <div className="bg-black/40 backdrop-blur-sm rounded-2xl border border-white/20 p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                    ❓ Nasıl Oynanır?
+                  </h3>
+                  
+                  <div className="space-y-3 text-sm text-white/80">
+                    <div className="flex items-start space-x-2">
+                      <div className="text-yellow-400 mt-0.5">1.</div>
+                      <div>Bakiye yükleyerek loot box kazan</div>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <div className="text-yellow-400 mt-0.5">2.</div>
+                      <div>"Kasayı Aç" butonuna tıkla</div>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <div className="text-yellow-400 mt-0.5">3.</div>
+                      <div>Animasyonu izle ve ödülünü gör</div>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <div className="text-yellow-400 mt-0.5">4.</div>
+                      <div>Ödülün hesabına otomatik yüklenir</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-white/10">
+                    <div className="text-xs text-white/60">
+                      <strong>Nadirlik Seviyeleri:</strong><br/>
+                      <span className="text-gray-400">● Common (70%)</span><br/>
+                      <span className="text-blue-400">● Rare (20%)</span><br/>
+                      <span className="text-purple-400">● Epic (8%)</span><br/>
+                      <span className="text-yellow-400">● Legendary (2%)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen relative overflow-hidden">
+      <SilkBackground />
+      
+      <div className="relative z-10 min-h-screen">
+        {/* Header */}
+        <div className="bg-black/20 backdrop-blur-sm border-b border-white/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-4xl font-bold text-white mb-2">
+                  🎁 Venusespor Ödül Kasası
+                </h1>
+                <p className="text-xl text-white/80">
+                  Heyecan verici ödüllerin seni bekliyor!
+                </p>
+              </div>
+              
+              <div className="text-right">
+                <div className="text-sm text-white/60">Merhaba</div>
+                <div className="text-lg font-semibold text-white">{user.name}</div>
+                <div className="text-sm text-white/80">
+                  Toplam Açılan: {user.totalLootboxesOpened}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="grid lg:grid-cols-3 gap-8">
+            
+            {/* Loot Box Area - Takes 2 columns */}
+            <div className="lg:col-span-2">
+              <Suspense fallback={
+                <div className="bg-black/40 backdrop-blur-sm rounded-2xl border border-white/20 p-8 text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-400 mx-auto"></div>
+                  <p className="text-white/60 mt-4">Kasa yükleniyor...</p>
+                </div>
+              }>
+                <LootBoxContainer 
+                  initialBalance={user.lootboxBalance}
+                  userId={user.id}
+                />
+              </Suspense>
+            </div>
+
+            {/* Side Panel - Recent History */}
+            <div className="space-y-6">
+              {/* Balance Card */}
+              <div className="bg-gradient-to-br from-yellow-600/20 to-orange-600/20 backdrop-blur-sm rounded-2xl border border-yellow-500/30 p-6">
+                <div className="text-center">
+                  <div className="text-6xl font-bold text-yellow-400 mb-2">
+                    {user.lootboxBalance}
+                  </div>
+                  <div className="text-yellow-200 font-semibold">
+                    Açılabilir Kasa
+                  </div>
+                  <div className="text-yellow-300/60 text-sm mt-1">
+                    Bakiye yükleyerek daha fazla kasa kazan!
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Openings */}
+              <div className="bg-black/40 backdrop-blur-sm rounded-2xl border border-white/20 p-6">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                  📜 Son Ödüllerim
+                </h3>
+                
+                {recentOpenings.length > 0 ? (
+                  <div className="space-y-3">
+                    {recentOpenings.map((opening, index) => (
+                      <div 
+                        key={opening.id}
+                        className={`p-3 rounded-xl border ${getRarityColors(opening.rarity).bg} ${getRarityColors(opening.rarity).border}`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">
+                            {opening.reward.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium ${getRarityColors(opening.rarity).text}`}>
+                              {opening.reward.name}
+                            </div>
+                            <div className="text-xs text-white/60 truncate">
+                              {opening.reward.description}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-2">🎁</div>
+                    <div className="text-white/60">
+                      Henüz kasa açmadın
+                    </div>
+                    <div className="text-white/40 text-sm">
+                      İlk kasanı aç ve ödülünü gör!
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* How to Play */}
+              <div className="bg-black/40 backdrop-blur-sm rounded-2xl border border-white/20 p-6">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                  ❓ Nasıl Oynanır?
+                </h3>
+                
+                <div className="space-y-3 text-sm text-white/80">
+                  <div className="flex items-start space-x-2">
+                    <div className="text-yellow-400 mt-0.5">1.</div>
+                    <div>Bakiye yükleyerek loot box kazan</div>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <div className="text-yellow-400 mt-0.5">2.</div>
+                    <div>"Kasayı Aç" butonuna tıkla</div>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <div className="text-yellow-400 mt-0.5">3.</div>
+                    <div>Animasyonu izle ve ödülünü gör</div>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <div className="text-yellow-400 mt-0.5">4.</div>
+                    <div>Ödülün hesabına otomatik yüklenir</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <div className="text-xs text-white/60">
+                    <strong>Nadirlik Seviyeleri:</strong><br/>
+                    <span className="text-gray-400">● Common (70%)</span><br/>
+                    <span className="text-blue-400">● Rare (20%)</span><br/>
+                    <span className="text-purple-400">● Epic (8%)</span><br/>
+                    <span className="text-yellow-400">● Legendary (2%)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getRarityColors(rarity: string) {
+  switch (rarity) {
+    case 'COMMON':
+      return {
+        bg: 'bg-gray-500/20',
+        border: 'border-gray-500/40',
+        text: 'text-gray-300'
+      };
+    case 'RARE':
+      return {
+        bg: 'bg-blue-500/20',
+        border: 'border-blue-500/40',
+        text: 'text-blue-300'
+      };
+    case 'EPIC':
+      return {
+        bg: 'bg-purple-500/20',
+        border: 'border-purple-500/40',
+        text: 'text-purple-300'
+      };
+    case 'LEGENDARY':
+      return {
+        bg: 'bg-yellow-500/20',
+        border: 'border-yellow-500/40',
+        text: 'text-yellow-300'
+      };
+    default:
+      return {
+        bg: 'bg-gray-500/20',
+        border: 'border-gray-500/40',
+        text: 'text-gray-300'
+      };
+  }
+}
